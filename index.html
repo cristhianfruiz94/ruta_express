@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ruta Express Claims Console</title>
+<!-- Ruta Express Claims Console — throwaway Product Zero prototype. Synthetic data only; nothing connected. Standalone export of the Claude artifact; fonts load from Google Fonts if online, system fonts otherwise. -->
+<style>html,body{margin:0} img{max-width:100%} [hidden]{display:none!important}</style>
+</head>
+<body>
+
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: an operations console. Left: queue with two tabs (resolved alone / needs a decision). Right: claim file with evidence, the agent's proposed decision, the customer reply, and the human action. Settings drawer at top. */
+:root{
+  --bg:#f6f5f1; --panel:#ffffff; --fg:#1d2026; --muted:#5f6670; --line:#dcd9d0;
+  --accent:#0b5c8a; --accent-ink:#ffffff;
+  --ok:#1f7a4d; --ok-bg:#e3f2e9; --warn:#9a5b00; --warn-bg:#fbf0db; --stop:#a3262b; --stop-bg:#f9e3e4;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#15181d; --panel:#1e2229; --fg:#e8e8e3; --muted:#a0a6ae; --line:#333944;
+  --accent:#5fa8d6; --accent-ink:#0f1b25;
+  --ok:#5ccf8f; --ok-bg:#15301f; --warn:#f0b35a; --warn-bg:#33270f; --stop:#f08a8e; --stop-bg:#3a1a1c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#15181d; --panel:#1e2229; --fg:#e8e8e3; --muted:#a0a6ae; --line:#333944;
+  --accent:#5fa8d6; --accent-ink:#0f1b25;
+  --ok:#5ccf8f; --ok-bg:#15301f; --warn:#f0b35a; --warn-bg:#33270f; --stop:#f08a8e; --stop-bg:#3a1a1c; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:14px;line-height:1.45;margin:0;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px 32px}
+h1,h2,h3{margin:0;text-wrap:balance}
+h1{font-size:17px;font-weight:600}
+h2{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+h3{font-size:15px;font-weight:600}
+.sim{background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn);border-radius:6px;padding:8px 12px;font-size:12.5px;margin-bottom:12px}
+.sim strong{font-weight:600}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px;margin-bottom:12px}
+header .meta{color:var(--muted);font-size:12.5px}
+.kpis{display:flex;flex-wrap:wrap;gap:8px;margin-left:auto}
+.kpi{border:1px solid var(--line);border-radius:6px;padding:6px 10px;background:var(--panel);min-width:120px}
+.kpi b{display:block;font-size:18px;font-weight:600;font-variant-numeric:tabular-nums}
+.kpi span{font-size:11.5px;color:var(--muted)}
+details.settings{border:1px solid var(--line);border-radius:6px;background:var(--panel);margin-bottom:12px}
+details.settings summary{cursor:pointer;padding:8px 12px;font-weight:500;list-style:none;display:flex;justify-content:space-between;align-items:center}
+details.settings summary::after{content:"Change";color:var(--accent);font-size:12.5px}
+details.settings[open] summary::after{content:"Close"}
+.setgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px 16px;padding:4px 12px 12px;border-top:1px solid var(--line)}
+.setgrid label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+.setgrid input{font:inherit;font-family:var(--mono);padding:6px 8px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--fg);min-width:0}
+.setgrid small{color:var(--muted);font-size:11px}
+main{display:grid;grid-template-columns:minmax(260px,340px) minmax(0,1fr);gap:14px}
+@media (max-width:760px){main{grid-template-columns:1fr}}
+.queue,.file{background:var(--panel);border:1px solid var(--line);border-radius:8px;min-width:0}
+.tabs{display:flex;border-bottom:1px solid var(--line)}
+.tabs button{flex:1;font:inherit;background:none;border:0;border-bottom:2px solid transparent;padding:10px 8px;color:var(--muted);cursor:pointer;font-weight:500}
+.tabs button[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent)}
+.tabs button:focus-visible,.act button:focus-visible,.setgrid input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.list{list-style:none;margin:0;padding:6px}
+.list li{border-radius:6px;padding:8px 10px;cursor:pointer;display:grid;grid-template-columns:1fr auto;gap:2px 8px}
+.list li:hover{background:var(--bg)}
+.list li[aria-current="true"]{background:var(--bg);box-shadow:inset 3px 0 0 var(--accent)}
+.list .id{font-family:var(--mono);font-size:12.5px}
+.list .sub{grid-column:1/-1;color:var(--muted);font-size:12px}
+.pill{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:999px;white-space:nowrap;align-self:start}
+.pill.ok{background:var(--ok-bg);color:var(--ok)}.pill.warn{background:var(--warn-bg);color:var(--warn)}.pill.stop{background:var(--stop-bg);color:var(--stop)}.pill.neutral{background:var(--bg);color:var(--muted);border:1px solid var(--line)}
+.file{padding:14px 16px;display:flex;flex-direction:column;gap:14px}
+.filehead{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline}
+.filehead .id{font-family:var(--mono);font-size:16px;font-weight:500}
+.filehead .meta{color:var(--muted);font-size:12.5px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.box{border:1px solid var(--line);border-radius:6px;padding:10px 12px;min-width:0}
+.box h2{margin-bottom:6px}
+dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:13px}
+dt{color:var(--muted)}dd{margin:0;font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.steps{margin:0;padding-left:18px;font-size:13px}
+.steps li{margin:3px 0}
+.steps .src{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+.decision{border-left:4px solid var(--accent);padding:10px 12px;background:var(--bg);border-radius:0 6px 6px 0}
+.decision.ok{border-left-color:var(--ok)}.decision.warn{border-left-color:var(--warn)}.decision.stop{border-left-color:var(--stop)}
+.decision b{display:block;font-size:14px;margin-bottom:2px}
+.reply{border:1px solid var(--line);border-radius:6px;padding:10px 12px;background:var(--bg);font-size:13px;max-width:62ch;white-space:pre-wrap}
+.reply .to{font-family:var(--mono);font-size:11.5px;color:var(--muted);display:block;margin-bottom:6px}
+.act{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.act button{font:inherit;font-weight:500;padding:8px 14px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer}
+.act button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.act button.danger{color:var(--stop);border-color:var(--stop)}
+.act button[disabled]{opacity:.5;cursor:default}
+.act .note{color:var(--muted);font-size:12.5px}
+.log{font-family:var(--mono);font-size:11.5px;color:var(--muted);border-top:1px solid var(--line);padding-top:8px}
+.log div{padding:1px 0}
+.empty{color:var(--muted);padding:16px}
+@media (prefers-reduced-motion:no-preference){.list li{transition:background .12s}}
+</style>
+
+<div class="sim"><strong>Simulated prototype.</strong> Synthetic claims only; no real customer data; nothing is connected to Helpdesk, Atlas, Rastreo or PayCo. Every number comes from the claim rules in the client pack (T Lxx) and the settings below.</div>
+
+<header>
+  <div><h1>Ruta Express Claims Console</h1><div class="meta">Colombia queue · Agent view · Product Zero prototype v0.1</div></div>
+  <div class="kpis" id="kpis"></div>
+</header>
+
+<details class="settings" id="settings">
+  <summary>Policy settings (owned by the client; the agent reads them, never changes them)</summary>
+  <div class="setgrid">
+    <label>Automatic refund cap, COP <input id="s_cap_cop" type="number" value="100000" step="1000"><small>CFO, message 2 / G:22</small></label>
+    <label>Automatic refund cap, MXN <input id="s_cap_mxn" type="number" value="500" step="50"><small>CFO, message 2 / G:22</small></label>
+    <label>Supervisor threshold, COP <input id="s_sup_cop" type="number" value="500000" step="10000"><small>T L15; 300k Aug rule was temporary (G:27)</small></label>
+    <label>Photo window, hours <input id="s_photo" type="number" value="48" step="1"><small>T L10 policy; 72 h practice (L11)</small></label>
+    <label>Late threshold, hours after window <input id="s_late" type="number" value="24" step="1"><small>T L08</small></label>
+    <label>Late credit, % of shipping fee <input id="s_pct" type="number" value="10" step="1"><small>T L08</small></label>
+  </div>
+</details>
+
+<main>
+  <section class="queue" aria-label="Claims queue">
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab_auto" aria-selected="true">Resolved by the agent <span id="n_auto"></span></button>
+      <button role="tab" id="tab_human" aria-selected="false">Needs a decision <span id="n_human"></span></button>
+    </div>
+    <ul class="list" id="list"></ul>
+  </section>
+  <section class="file" id="file" aria-live="polite"></section>
+</main>
+
+<script>
+// ---------- Synthetic claims (invented; no real person, phone, email or address) ----------
+const CLAIMS = [
+ {id:"SYN-3001",country:"CO",cur:"COP",account:"consumer",type:"late",declared:85000,fee:9000,hoursLate:30,order:"ORD-77A1",promised:"2026-10-01 14:00–18:00",delivered:"2026-10-03 00:10"},
+ {id:"SYN-3002",country:"CO",cur:"COP",account:"consumer",type:"late",declared:60000,fee:8000,hoursLate:10,order:"ORD-77A4",promised:"2026-10-02 09:00–13:00",delivered:"2026-10-02 23:00"},
+ {id:"SYN-3003",country:"CO",cur:"COP",account:"business",type:"late",declared:98000,fee:12000,hoursLate:48,order:"ORD-77B9",promised:"2026-10-04 08:00–12:00",delivered:"2026-10-06 12:00"},
+ {id:"SYN-3004",country:"CO",cur:"COP",account:"consumer",type:"damaged",declared:240000,fee:11000,photoHours:20,order:"ORD-78C2",delivered:"2026-10-01 16:40",photoNote:"Box crushed on one side; item visible through tear",photoShowsDamage:true},
+ {id:"SYN-3005",country:"CO",cur:"COP",account:"business",type:"damaged",declared:1200000,fee:25000,photoHours:60,order:"ORD-78D7",delivered:"2026-10-02 11:05",photoNote:"Screen cracked; packaging intact",photoShowsDamage:true},
+ {id:"SYN-3006",country:"CO",cur:"COP",account:"consumer",type:"damaged",declared:150000,fee:9000,photoHours:100,order:"ORD-78E3",delivered:"2026-10-06 10:20",photoNote:"Water stains on box; contents not shown",photoShowsDamage:false},
+];
+const state = {}; // id -> {status, log:[]}
+CLAIMS.forEach(c=>state[c.id]={status:"new",log:[]});
+let activeTab="auto", activeId=null;
+
+const $=s=>document.querySelector(s);
+const fmt=(n,cur)=>new Intl.NumberFormat(cur==="COP"?"es-CO":"es-MX",{maximumFractionDigits:0}).format(Math.round(n))+" "+cur;
+const settings=()=>({capCOP:+$("#s_cap_cop").value,capMXN:+$("#s_cap_mxn").value,supCOP:+$("#s_sup_cop").value,photo:+$("#s_photo").value,late:+$("#s_late").value,pct:+$("#s_pct").value});
+
+// ---------- Rule engine: the agent's reasoning, one claim at a time ----------
+function evaluate(c){
+  const s=settings(); const cap=c.cur==="COP"?s.capCOP:s.capMXN; const steps=[]; let r={};
+  steps.push({t:`Triage: claim type "${c.type}", account "${c.account}", country ${c.country}.`,src:"B:26, T L06"});
+  if(c.type==="late"){
+    steps.push({t:`Promised window ${c.promised}; delivered ${c.delivered}; ${c.hoursLate} h after the window.`,src:"Atlas (simulated), Rastreo (simulated)"});
+    if(c.hoursLate>s.late){
+      const credit=c.fee*s.pct/100;
+      steps.push({t:`${c.hoursLate} h > ${s.late} h → late. Credit = ${s.pct}% × shipping fee ${fmt(c.fee,c.cur)} = ${fmt(credit,c.cur)}. Declared value is not used.`,src:"T L08"});
+      const overCap=credit>cap;
+      steps.push({t:overCap?`Credit above the automatic cap ${fmt(cap,c.cur)} → a person approves.`:`Credit within the automatic cap ${fmt(cap,c.cur)}. Late credits are cleared for the agent alone.`,src:overCap?"CFO G:22":"T L29, G:22"});
+      r={who:overCap?"human":"agent",tone:overCap?"warn":"ok",amount:credit,title:overCap?"Prepared: late credit, needs approval (above cap)":"Resolved alone: late-delivery credit issued",
+         reply:`Estimado(a) cliente,\n\nSu pedido ${c.order} llegó ${c.hoursLate} horas después de la ventana prometida. Por nuestra política de entregas tardías, hemos aplicado un crédito de ${fmt(credit,c.cur)} (10 % de la tarifa de envío) a su cuenta.\n\nLamentamos el inconveniente y agradecemos su paciencia.\n\nRuta Express`};
+    } else {
+      steps.push({t:`${c.hoursLate} h ≤ ${s.late} h → not late under the rule. No credit.`,src:"T L08"});
+      r={who:"agent",tone:"ok",amount:0,title:"Resolved alone: not late under the 24 h rule, no credit",
+         reply:`Estimado(a) cliente,\n\nRevisamos su pedido ${c.order}. La entrega se realizó ${c.hoursLate} horas después de la ventana prometida, dentro del margen de 24 horas que establece nuestra política, por lo que no aplica un crédito en este caso.\n\nQuedamos atentos a cualquier otra consulta.\n\nRuta Express`};
+    }
+  } else if(c.type==="damaged"){
+    steps.push({t:`Delivered ${c.delivered}; photo uploaded ${c.photoHours} h after delivery. Photo note: "${c.photoNote}".`,src:"ReclamaYa attachment (simulated)"});
+    let windowFlag, tone="warn";
+    if(c.photoHours<=s.photo){windowFlag=`Photo within the ${s.photo} h window.`;}
+    else if(c.photoHours<=72){windowFlag=`Photo at ${c.photoHours} h: outside the ${s.photo} h policy, inside the 72 h practice. Flagged for the person; the agent does not reject.`;}
+    else {windowFlag=`Photo at ${c.photoHours} h: outside policy and practice. Proposed rejection, a person signs.`;tone="stop";}
+    steps.push({t:windowFlag,src:"T L10–L12"});
+    const amount=(c.photoShowsDamage&&c.photoHours<=72)?c.declared:0;
+    steps.push({t:c.photoShowsDamage?`Photo shows damage → refund up to declared value ${fmt(c.declared,c.cur)} (proposed: full).`:`Photo does not clearly show damage → proposed amount 0; person reviews.`,src:"T L10"});
+    const overSup=c.cur==="COP"&&amount>s.supCOP;
+    steps.push({t:`Damaged claims always get a human sign-off.${amount>cap?` Amount above automatic cap ${fmt(cap,c.cur)}.`:""}${overSup?` Above supervisor threshold ${fmt(s.supCOP,c.cur)} → supervisor approves.`:""}`,src:"T L30; G:22; T L15"});
+    r={who:overSup?"supervisor":"human",tone,amount,title:amount>0?`Prepared: damaged, refund ${fmt(amount,c.cur)} proposed — ${overSup?"supervisor":"agent"} signs`:"Prepared: damaged, rejection proposed — a person signs",
+       reply:amount>0?`Estimado(a) cliente,\n\nRecibimos las fotografías de su pedido ${c.order} y confirmamos el daño reportado. Hemos aprobado un reembolso de ${fmt(amount,c.cur)}, correspondiente al valor declarado del paquete. Verá el abono en un plazo de 3 a 5 días hábiles.\n\nLamentamos lo ocurrido.\n\nRuta Express`
+         :`Estimado(a) cliente,\n\nRevisamos su reclamo por el pedido ${c.order}. La fotografía fue enviada ${c.photoHours} horas después de la entrega, fuera del plazo de ${s.photo} horas que establece nuestra política, y no permite confirmar el daño. Por este motivo no es posible aprobar el reembolso. Si cuenta con fotografías adicionales tomadas el día de la entrega, puede responder a este mensaje.\n\nRuta Express`};
+  }
+  return {...r,steps};
+}
+
+// ---------- Rendering ----------
+function bucket(c){const e=evaluate(c);return e.who==="agent"?"auto":"human";}
+function render(){
+  const s=settings();
+  const items=CLAIMS.filter(c=>bucket(c)===activeTab);
+  $("#n_auto").textContent="("+CLAIMS.filter(c=>bucket(c)==="auto").length+")";
+  $("#n_human").textContent="("+CLAIMS.filter(c=>bucket(c)==="human").length+")";
+  $("#tab_auto").setAttribute("aria-selected",activeTab==="auto");$("#tab_human").setAttribute("aria-selected",activeTab==="human");
+  if(!items.find(c=>c.id===activeId)) activeId=items[0]?items[0].id:null;
+  $("#list").innerHTML=items.map(c=>{const e=evaluate(c);const st=state[c.id].status;
+    const pill=st==="approved"?'<span class="pill ok">Approved</span>':st==="rejected"?'<span class="pill stop">Rejected</span>':e.who==="agent"?'<span class="pill ok">Closed</span>':e.who==="supervisor"?'<span class="pill stop">Supervisor</span>':'<span class="pill warn">Review</span>';
+    return `<li data-id="${c.id}" aria-current="${c.id===activeId}"><span class="id">${c.id}</span>${pill}<span class="sub">${c.type} · ${c.account} · ${fmt(c.declared,c.cur)} declared${c.type==="late"?` · ${c.hoursLate} h late`:` · photo at ${c.photoHours} h`}</span></li>`;}).join("")||'<li class="empty">Nothing in this tab with the current settings.</li>';
+  const auto=CLAIMS.filter(c=>bucket(c)==="auto").length;
+  const paidAlone=CLAIMS.filter(c=>bucket(c)==="auto").reduce((a,c)=>a+evaluate(c).amount,0);
+  $("#kpis").innerHTML=`<div class="kpi"><b>${auto}/${CLAIMS.length}</b><span>resolved with no human action</span></div><div class="kpi"><b>${fmt(paidAlone,"COP")}</b><span>paid by the agent alone</span></div><div class="kpi"><b>0</b><span>automatic payments above cap</span></div>`;
+  renderFile();
+}
+function renderFile(){
+  const c=CLAIMS.find(x=>x.id===activeId); const f=$("#file");
+  if(!c){f.innerHTML='<p class="empty">Select a claim.</p>';return;}
+  const e=evaluate(c); const st=state[c.id];
+  const human=e.who!=="agent";
+  f.innerHTML=`
+  <div class="filehead"><span class="id">${c.id}</span><span class="meta">${c.type} · ${c.country} · ${c.account} account${c.account==="business"?" · priority (T L25)":""} · order ${c.order}</span></div>
+  <div class="grid2">
+    <div class="box"><h2>Order (Atlas, simulated)</h2><dl><dt>Declared value</dt><dd>${fmt(c.declared,c.cur)}</dd><dt>Shipping fee</dt><dd>${fmt(c.fee,c.cur)}</dd>${c.promised?`<dt>Promised</dt><dd>${c.promised}</dd>`:""}<dt>Delivered</dt><dd>${c.delivered}</dd></dl></div>
+    <div class="box"><h2>Evidence (${c.type==="late"?"Rastreo, simulated":"ReclamaYa photo, simulated"})</h2><dl>${c.type==="late"?`<dt>Hours after window</dt><dd>${c.hoursLate} h</dd>`:`<dt>Photo uploaded</dt><dd>${c.photoHours} h after delivery</dd><dt>Photo note</dt><dd>${c.photoNote}</dd>`}</dl></div>
+  </div>
+  <div class="box"><h2>Agent reasoning</h2><ol class="steps">${e.steps.map(s=>`<li>${s.t} <span class="src">[${s.src}]</span></li>`).join("")}</ol></div>
+  <div class="decision ${e.tone}"><b>${e.title}</b>${e.amount?`Amount: ${fmt(e.amount,c.cur)}`:"Amount: none"} · ${human?`Waiting for ${e.who==="supervisor"?"a supervisor":"an agent"}`:"Closed by the agent; logged for audit"}</div>
+  <div><h2 style="margin-bottom:6px">Customer reply ${human?"— draft, sent only after approval":"— sent"} (formal “usted”, T L24)</h2><div class="reply"><span class="to">To: customer of ${c.id} · channel: ReclamaYa / email (simulated)</span>${e.reply}</div></div>
+  <div class="act">${human?`<button class="primary" id="b_ok" ${st.status!=="new"?"disabled":""}>Approve and send</button><button class="danger" id="b_no" ${st.status!=="new"?"disabled":""}>Reject, send rejection</button><span class="note">${st.status==="new"?"Nothing is paid until you approve (T L30, G:22).":"Decision recorded: "+st.status+"."}</span>`
+    :`<button id="b_reopen">Reopen for a person</button><span class="note">The agent closed this claim alone (T L29). Reopen if you disagree; nothing more will be paid without a person.</span>`}</div>
+  <div class="log">${[...st.log,`${new Date().toISOString().slice(0,16).replace("T"," ")} agent evaluated with settings cap=${fmt(c.cur==="COP"?settings().capCOP:settings().capMXN,c.cur)} photo=${settings().photo}h late=${settings().late}h`].map(l=>`<div>${l}</div>`).join("")}</div>`;
+  const stamp=()=>new Date().toISOString().slice(11,16);
+  f.querySelector("#b_ok")?.addEventListener("click",()=>{st.status="approved";st.log.push(`${stamp()} agent-user approved · ${e.amount?"PayCo (simulated) refund "+fmt(e.amount,c.cur):"no payment"} · reply sent via Helpdesk (simulated)`);renderFile();});
+  f.querySelector("#b_no")?.addEventListener("click",()=>{st.status="rejected";st.log.push(`${stamp()} agent-user rejected · no payment · rejection sent via Helpdesk (simulated)`);renderFile();});
+  f.querySelector("#b_reopen")?.addEventListener("click",()=>{st.log.push(`${stamp()} agent-user reopened for human review`);renderFile();});
+}
+$("#list").addEventListener("click",ev=>{const li=ev.target.closest("li[data-id]");if(!li)return;activeId=li.dataset.id;render();});
+$("#tab_auto").addEventListener("click",()=>{activeTab="auto";render();});
+$("#tab_human").addEventListener("click",()=>{activeTab="human";render();});
+document.querySelectorAll(".setgrid input").forEach(i=>i.addEventListener("input",render));
+render();
+</script>
+
+</body>
+</html>
